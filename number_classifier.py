@@ -3,7 +3,7 @@ from tqdm.auto import tqdm
 import pickle
 import matplotlib.pyplot as plt
 
-from data_loader import DataLoader
+from data_loader import DataLoaderMNIST
 from layers.conv2d import Conv2d
 from layers.linear import Linear
 from layers.relu import ReLU
@@ -134,32 +134,33 @@ def train(batch_size, epochs, learning_rate):
     loss_fn = CrossEntropyLoss()
     
     # load the data
-    dataloader = DataLoader(batch_size)
-    dataloader.load_mnist_images('data/dataset/train-images-idx3-ubyte.gz')
-    dataloader.load_mnist_labels('data/dataset/train-labels-idx1-ubyte.gz')
+    dataset = DataLoaderMNIST('data/dataset/train-images-idx3-ubyte.gz',
+                              'data/dataset/train-labels-idx1-ubyte.gz',
+                              train=True)
+   
+    dataloader = dataset.dataloader(batch_size)
     
     # start the training process
-    for i in range(epochs):
+    for epoch in range(epochs):
         
-        loss = 0
-        print(f"Calculating epoch {i}/{epochs}")
-        for batch in tqdm(range(0,60000, batch_size)):
+        losses = []
+        print(f"Calculating epoch {epoch}/{epochs}")
+        for (X,Y) in tqdm(dataloader):
             
-            X_train, Y_train = dataloader.get_batch(batch)
-            Z3 = forward(X_train)
-            loss = loss_fn.calc_loss(Z3, Y_train)
+            Z3 = forward(X)
+            loss = loss_fn.calc_loss(Z3, Y)
             
             # do the backward pass
-            dZ3 = loss_fn.backward(Y_train) 
-            backpropagation(Y_train, dZ3)
+            dZ3 = loss_fn.backward(Y) 
+            backpropagation(Y, dZ3)
             update_params(learning_rate)
             
-            loss += loss
+            losses.append(loss)
             
         # reset dataloader for the next pass and print epoch results
-        dataloader.reset() 
-        print(f"Average loss in epoch {i} was: {loss / len(range(0,60000, batch_size))}")
-        store_weights(i)
+        dataloader = dataset.dataloader(batch_size)
+        print(f"Average loss in epoch {epoch} was: {sum(losses) / len(losses)}")
+        store_weights(epoch)
         
 def test():
     """Runs the test data trough the trained neural net
@@ -169,9 +170,12 @@ def test():
         every image in the test dataset
     """
     # load the data
-    dataloader = DataLoader(batch_size=32)
-    dataloader.load_mnist_images('data/dataset/train-images-idx3-ubyte.gz', train=False)
-    dataloader.load_mnist_labels('data/dataset/train-labels-idx1-ubyte.gz', train=False)
+    # load the data
+    dataset = DataLoaderMNIST('data/dataset/t10k-images-idx3-ubyte.gz',
+                              'data/dataset/t10k-labels-idx1-ubyte.gz',
+                              train=False)
+   
+    dataloader = dataset.dataloader(batch_size=10000)
     loss_fn = CrossEntropyLoss()
     
     # Load weights
@@ -188,24 +192,21 @@ def test():
     
     # batches are not needed in the test run (no backward passing)...
     # but the data loader returns only batches for now...
-    for batch in tqdm(range(0,10000, 32)):
+    for (X, Y) in tqdm(dataloader):
         
-        # load the current batch
-        X_test, Y_test = dataloader.get_batch(batch)
         # do the forward pass and calculate the loss to apply softmax
-        Z3 = forward(X_test)
-        loss = loss_fn.calc_loss(Z3, Y_test)
+        Z3 = forward(X)
+        loss = loss_fn.calc_loss(Z3, Y)
         # calculate and store accuracy
         preds = get_predictions(loss_fn.A_softmax)
-        accuracy += get_accuracy(preds, Y_test)
+        accuracy += get_accuracy(preds, Y)
         
         # append the images, preds, and labels for plotting specific results later on if needed
-        for i in range(32):
-            images.append(X_test[i])
+        for i in range(10000):
+            images.append(X[i])
             predictions.append(preds[i])
-            labels.append(Y_test[i])
+            labels.append(Y[i])
     
-    accuracy = accuracy / len(range(0,10000, 32))
     print(f"The accuracy on the test-set was: {accuracy}")
     
     return images, predictions, labels
@@ -237,8 +238,8 @@ if __name__ == "__main__":
     r2 = ReLU()
     l2 = Linear(500, 10)
     
-    train(batch_size=32, epochs=10, learning_rate=1e-4)
+    #train(batch_size=32, epochs=10, learning_rate=1e-4)
     
-    # imgs, preds, labels = test()
-    # test_specific_prediction(20, imgs, preds, labels)
+    imgs, preds, labels = test()
+    test_specific_prediction(20, imgs, preds, labels)
                   
